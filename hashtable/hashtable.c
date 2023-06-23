@@ -119,7 +119,6 @@ extern hash_bucket *ht_get_bucket(hash_table *table, size_t index, size_t depth)
 }
 
 extern int ht_bucket_remove(hash_table *table, size_t index, size_t depth) {
-    // works by freeing the bucket and replacing the pointer to it with the next on chain 
     hash_bucket *bucket, *tmp;
     if (depth == 0) return -1;
     if (depth == 1) {
@@ -127,7 +126,6 @@ extern int ht_bucket_remove(hash_table *table, size_t index, size_t depth) {
         free(table->buckets[index]->value);
         tmp = table->buckets[index]->next_bucket;
         free(table->buckets[index]);
-        // replace pointer from the table to next bucket
         table->buckets[index] = tmp;
         return 0;
     }
