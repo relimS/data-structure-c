@@ -1,66 +1,81 @@
 #include "hashtable.h"
 #include <stdlib.h>
+#include <string.h>
 
-extern size_t fnv1a (void *data, size_t bytes) {
-    size_t i, hash;
-    hash = FNV_offset_basis;
-    for (i = 0; i != bytes; ++i) {
-        hash ^= *((char*)data+i);
-        hash *= FNV_prime;
-    }
-    return hash;
-}
-
-extern int ht_init(hash_table *table, size_t n) {
+extern int ht_init(Hash_table *table, size_t n) {
     size_t i;
     if (n == 0) return -1;
-    table->buckets = (hash_bucket**)malloc(n*sizeof(hash_bucket*));
+    table->buckets = (Hash_bucket**)malloc(n*sizeof(Hash_bucket*));
     if (table->buckets == NULL) return -1;
-    table->nmemb = n;
+    table->n = n;
     for (i = 0; i != n; ++i) {
         table->buckets[i] = NULL;
     }
     return 0;
 }
 
-extern hash_bucket *ht_add(hash_table *table, void *key, size_t key_size, void *value, size_t value_size, size_t (*hash)(void *, size_t)) {
+extern Hash_bucket *ht_add(Hash_table *table, const void *key, size_t key_size, const void *value, size_t value_size, size_t hash, int (*compar)(const void *, const void *)) {
     size_t index;
-    hash_bucket *bucket;
-    index = hash(key, key_size) % table->nmemb;
+    Hash_bucket *bucket;
+    index = hash % table->n;
     if (!(table->buckets[index])) {
-        table->buckets[index] = malloc(sizeof(hash_bucket));
+        table->buckets[index] = (Hash_bucket*)malloc(sizeof(Hash_bucket));
         table->buckets[index]->next_bucket = NULL;
         table->buckets[index]->key = NULL;
     }
     bucket = table->buckets[index];
     while (bucket->next_bucket) {
         bucket = bucket->next_bucket;
-        if (!strncmp((char*)key, (char*)(bucket->key), key_size)) return NULL;
+        if (!compar(key, bucket->key)) return NULL;
     }
     if (bucket->key) {
-        bucket->next_bucket = (hash_bucket*)malloc(sizeof(hash_bucket));
+        bucket->next_bucket = (Hash_bucket*)malloc(sizeof(Hash_bucket));
         bucket = bucket->next_bucket;
     }
-    if (!(bucket->key = malloc(key_size+sizeof(char)))|| !(bucket->value = malloc(value_size+sizeof(char)))) return NULL;
+    bucket->key = malloc(key_size);
+    if (!bucket->key) return NULL;
+    bucket->value = malloc(value_size);
+    if (!bucket->value) {
+        free(bucket->key);
+        return NULL;
+    }
     memcpy(bucket->key, key, key_size);
     memcpy(bucket->value, value, value_size);
-    memset((char*)(bucket->key)+key_size, '\0', sizeof(char));
-    memset((char*)(bucket->value)+value_size, '\0', sizeof(char));
     bucket->next_bucket = NULL;
     return bucket;
 }
 
-extern void __ht_bucket_free_recursive(hash_bucket *bucket) {
-    // hash_bucket *bucket2;
-    // while (bucket->next_bucket) {
-    //     free(bucket->key);
-    //     free(bucket->value);
-    //     bucket2 = bucket->next_bucket;
-    //     free(bucket);
-    //     bucket = bucket2;
-    // }
+extern Hash_bucket *ht_add_fast(Hash_table *table, const void *key, size_t key_size, const void *value, size_t value_size, size_t hash) {
+    size_t index;
+    Hash_bucket *bucket;
+
+    bucket = (Hash_bucket*)malloc(sizeof(Hash_bucket));
+    if (bucket == NULL) return NULL;
+    index = hash % table->n;
+    bucket->next_bucket = table->buckets[index];
+    bucket->key = malloc(key_size);
+    if (!bucket->key) return NULL;
+    bucket->value = malloc(value_size);
+    if (!bucket->value) {
+        free(bucket->key);
+        return NULL;
+    }
+    memcpy(bucket->key, key, key_size);
+    memcpy(bucket->value, value, value_size);
+    table->buckets[index] = bucket;
+    return bucket;
+}
+
+extern void __ht_bucket_free_list(Hash_bucket *bucket) {
+    Hash_bucket *bucket2;
     if (!bucket) return;
-    if (bucket->next_bucket) __ht_bucket_free_recursive(bucket->next_bucket);
+    while (bucket->next_bucket) {
+        free(bucket->key);
+        free(bucket->value);
+        bucket2 = bucket->next_bucket;
+        free(bucket);
+        bucket = bucket2;
+    }
     if (bucket->key) {
         free(bucket->key);
         free(bucket->value);
@@ -68,37 +83,37 @@ extern void __ht_bucket_free_recursive(hash_bucket *bucket) {
     free(bucket);
 }
 
-extern hash_bucket *ht_lookup(hash_table *table, void *key, size_t key_size, size_t (*hash)(void *, size_t)) {
-    hash_bucket *bucket;
+extern Hash_bucket *ht_lookup(Hash_table *table, const void *key, size_t hash, int (*compar)(const void *, const void *)) {
+    Hash_bucket *bucket;
     size_t index;
-    index = hash(key, key_size) % table->nmemb;
+    index = hash % table->n;
     bucket = table->buckets[index];
     if (!bucket) return NULL;
     if (bucket->key) {
-        if (!strncmp((char*)(bucket->key), (char*)key, key_size)) return bucket;
+        if (!compar(key, bucket->key)) return bucket;
         while (bucket->next_bucket != NULL) {
             bucket = bucket->next_bucket;
-            if (!strncmp((char*)(bucket->key), (char*)key, key_size)) return bucket;
+            if (!compar(key, bucket->key)) return bucket;
         }
     }
     return NULL;
 }
 
-extern hash_bucket_location ht_lookup_location(hash_table *table, void *key, size_t key_size, size_t (*hash)(void *, size_t)) {
-    hash_bucket *bucket;
-    hash_bucket_location lot;
-    lot.index = hash(key, key_size) % table->nmemb;
+extern Hash_bucket_location ht_lookup_location(Hash_table *table, const void *key, size_t hash, int (*compar)(const void *, const void *)) {
+    Hash_bucket *bucket;
+    Hash_bucket_location lot;
+    lot.index = hash % table->n;
     lot.depth = 1;
     bucket = table->buckets[lot.index];
     if (bucket) {
         if (bucket->key) {
-            if (!strncmp((char*)(bucket->key), (char*)key, key_size)) {
+            if (!compar(key, bucket->key)) {
                 return lot;
             }
             while (bucket->next_bucket) {
                 bucket = bucket->next_bucket;
                 ++lot.depth;
-                if (!strncmp((char*)(bucket->key), (char*)key, key_size)) return lot;
+                if (!compar(key, bucket->key)) return lot;
             }
         }
     }
@@ -106,8 +121,8 @@ extern hash_bucket_location ht_lookup_location(hash_table *table, void *key, siz
     return lot;
 }
 
-extern hash_bucket *ht_get_bucket(hash_table *table, size_t index, size_t depth) {
-    hash_bucket *bucket;
+extern Hash_bucket *ht_get_bucket(Hash_table *table, size_t index, size_t depth) {
+    Hash_bucket *bucket;
     size_t i;
     if (depth == 0) return NULL;
     bucket = table->buckets[index];
@@ -118,8 +133,8 @@ extern hash_bucket *ht_get_bucket(hash_table *table, size_t index, size_t depth)
     return bucket;
 }
 
-extern int ht_bucket_remove(hash_table *table, size_t index, size_t depth) {
-    hash_bucket *bucket, *tmp;
+extern int ht_bucket_remove(Hash_table *table, size_t index, size_t depth) {
+    Hash_bucket *bucket, *tmp;
     if (depth == 0) return -1;
     if (depth == 1) {
         free(table->buckets[index]->key);
@@ -134,11 +149,9 @@ extern int ht_bucket_remove(hash_table *table, size_t index, size_t depth) {
     free(bucket->next_bucket->key);
     free(bucket->next_bucket->value);
     if (!bucket->next_bucket->next_bucket) {
-        // already at end of chain
         free(bucket->next_bucket);
         bucket->next_bucket = NULL;
     } else {
-        // point next_bucket to the next in the chain
         tmp = bucket->next_bucket->next_bucket;
         free(bucket->next_bucket);
         bucket->next_bucket = tmp;
@@ -146,8 +159,8 @@ extern int ht_bucket_remove(hash_table *table, size_t index, size_t depth) {
     return 0;
 }
 
-extern void ht_free(hash_table *table) {
+extern void ht_free(Hash_table *table) {
     size_t i;
-    for (i = 0; i != table->nmemb; ++i) __ht_bucket_free_recursive(table->buckets[i]);
+    for (i = 0; i != table->n; ++i) __ht_bucket_free_list(table->buckets[i]);
     free(table->buckets);
 }
