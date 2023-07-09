@@ -1,6 +1,4 @@
 #include "hashtable.h"
-#include <stdlib.h>
-#include <string.h>
 
 extern int ht_init(Hash_table *table, size_t n) {
     size_t i;
