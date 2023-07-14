@@ -64,7 +64,7 @@ extern Hash_bucket *ht_add_fast(Hash_table *table, const void *key, size_t key_s
     return bucket;
 }
 
-extern void __ht_bucket_free_list(Hash_bucket *bucket) {
+static inline void __ht_bucket_free_list(Hash_bucket *bucket) {
     Hash_bucket *bucket2;
     if (!bucket) return;
     while (bucket->next_bucket) {
@@ -131,7 +131,7 @@ extern Hash_bucket *ht_get_bucket(Hash_table *table, size_t index, size_t depth)
     return bucket;
 }
 
-extern int ht_bucket_remove(Hash_table *table, size_t index, size_t depth) {
+extern int ht_bucket_erase(Hash_table *table, size_t index, size_t depth) {
     Hash_bucket *bucket, *tmp;
     if (depth == 0) return -1;
     if (depth == 1) {

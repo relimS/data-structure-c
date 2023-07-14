@@ -1,7 +1,7 @@
 CC := $(shell !(command -v gcc >/dev/null 2>&1 && echo gcc) && command -v clang >/dev/null 2>&1 && echo clang)
 CFLAGS ?= -Wall -Wextra
 DEBUG_FLAGS ?= -Og -g -ggdb
-RELEASE_FLAGS ?= -O2
+RELEASE_FLAGS ?= -O2 -flto
 DEBUGGER := $(shell command -v gdb)
 
 all: release
