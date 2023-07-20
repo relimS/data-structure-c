@@ -1,16 +1,17 @@
 CC := $(shell !(command -v gcc >/dev/null 2>&1 && echo gcc) && command -v clang >/dev/null 2>&1 && echo clang)
-CFLAGS ?= -Wall -Wextra
+CFLAGS ?= -Wall -Wextra -fstrict-aliasing
 DEBUG_FLAGS ?= -Og -g -ggdb
-RELEASE_FLAGS ?= -O2 -flto
+RELEASE_FLAGS ?= -O3 -flto
 DEBUGGER := $(shell command -v gdb)
 
 all: release
 
-debug: CFLAGS += ${DEBUG_FLAGS}
+debug: override CFLAGS += ${DEBUG_FLAGS}
 debug: clean main exec
 
-release: CFLAGS += ${RELEASE_FLAGS}
+release: override CFLAGS += ${RELEASE_FLAGS}
 release: clean main exec
+
 main:
 ifeq ($(CC),)
 	@echo "Error: Cannot find gcc or clang."
