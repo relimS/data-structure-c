@@ -124,7 +124,7 @@ int main(void) {
         for (j = 0; j != sizeof(size_t)/sizeof(int); ++j) ((int*)&i)[j] = rand();
     }
 
-    lot = ht_lookup_location(&table, keys+j, fnv1a(keys+j, sizeof(size_t)), compar);
+    lot = ht_lookup_location(&table, keys+i, fnv1a(keys+i, sizeof(size_t)), compar);
     if (!lot.depth) printf("failed\n");
     else {
         if(ht_bucket_erase(&table, lot.index, lot.depth) < 0) printf("failed\n");
