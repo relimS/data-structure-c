@@ -1,5 +1,5 @@
 CC := $(shell !(command -v gcc >/dev/null 2>&1 && echo gcc) && command -v clang >/dev/null 2>&1 && echo clang)
-CFLAGS ?= -Wall -Wextra -fstrict-aliasing
+CFLAGS ?= -Wall -Wextra -march=native
 DEBUG_FLAGS ?= -Og -g -ggdb
 RELEASE_FLAGS ?= -O3 -flto
 DEBUGGER := $(shell command -v gdb)
@@ -7,29 +7,22 @@ DEBUGGER := $(shell command -v gdb)
 all: release
 
 debug: override CFLAGS += ${DEBUG_FLAGS}
-debug: clean main exec
+debug: clean compile exec
 
 release: override CFLAGS += ${RELEASE_FLAGS}
-release: clean main exec
+release: clean compile exec
 
-main:
+compile:
 ifeq ($(CC),)
 	@echo "Error: Cannot find gcc or clang."
 	@echo "Suggestion: make CC=<compiler path>"
 else
-	$(CC) $(CFLAGS) -c hashtable.c -o hashtable.o
-	$(CC) $(CFLAGS) test.c hashtable.o -o ht_test
+	$(CC) $(CFLAGS) -c flat_hash_map.c -o flat_hash_map.o
+	$(CC) $(CFLAGS) test.c flat_hash_map.o -o fhm_test
 endif
 
 exec:
-	./ht_test
-
-debugger_exec:
-ifeq ($(DEBUGGER),)
-	./ht_test
-else
-	@echo run | $(DEBUGGER) ./ht_test* && echo
-endif
+	./fhm_test
 
 clean:
-	$(RM) hashtable.o ht_test*
+	$(RM) flat_hash_map.o fhm_test*
