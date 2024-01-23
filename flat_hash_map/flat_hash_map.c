@@ -15,7 +15,7 @@ extern int fhm_init(Flat_hash_map *map, size_t n, size_t key_size, size_t val_si
     return 0;
 }
 
-static inline ssize_t __add__(void *ptr, size_t n, const void *key, size_t key_size, const void *val, size_t val_size, size_t hash) {
+static inline ssize_t __add__(void *ptr, size_t n, const void *key, size_t key_size, const void *val, size_t val_size, uint64_t hash) {
     size_t group;
     uint8_t i;
 
@@ -33,7 +33,7 @@ static inline ssize_t __add__(void *ptr, size_t n, const void *key, size_t key_s
 
 }
 
-extern ssize_t fhm_add(Flat_hash_map *map, const void *key, size_t key_size, const void *val, size_t val_size, size_t hash) {
+extern ssize_t fhm_add(Flat_hash_map *map, const void *key, size_t key_size, const void *val, size_t val_size, uint64_t hash) {
     // size_t group;
     // uint8_t i;
 
@@ -59,7 +59,7 @@ extern void *fhm_get_val(Flat_hash_map *map, size_t index, size_t key_size, size
     return (uint8_t*)map->data+map->n*16+index*(key_size+val_size)+key_size;
 }
 
-extern ssize_t fhm_find(Flat_hash_map *map, const void *key, size_t key_size, size_t val_size, size_t hash, int (*compar)(const void *, const void *)) {
+extern ssize_t fhm_find(Flat_hash_map *map, const void *key, size_t key_size, size_t val_size, uint64_t hash, int (*compar)(const void *, const void *)) {
     size_t group;
     uint8_t i, h2;
 
@@ -78,7 +78,7 @@ extern ssize_t fhm_find(Flat_hash_map *map, const void *key, size_t key_size, si
     return -1;
 }
 
-extern void *fhm_lookup(Flat_hash_map *map, const void *key, size_t key_size, size_t val_size, size_t hash, int (*compar)(const void *, const void *)) {
+extern void *fhm_lookup(Flat_hash_map *map, const void *key, size_t key_size, size_t val_size, uint64_t hash, int (*compar)(const void *, const void *)) {
     return fhm_get_val(map, fhm_find(map, key, key_size, val_size, hash, compar), key_size, val_size);
 }
 
@@ -90,7 +90,7 @@ void fhm_free(Flat_hash_map *map) {
     free(map->data);
 }
 
-extern int fhm_resize(Flat_hash_map *map, size_t n, size_t key_size, size_t val_size, size_t (*hash)(const void*)) {
+extern int fhm_resize(Flat_hash_map *map, size_t n, size_t key_size, size_t val_size, uint64_t (*hash)(const void*)) {
     size_t i, hash_;
     ssize_t ret;
     uint8_t j;
@@ -122,7 +122,7 @@ extern int fhm_resize(Flat_hash_map *map, size_t n, size_t key_size, size_t val_
 }
 
 #ifdef __SSE2__
-    extern ssize_t fhm_find_sse(Flat_hash_map *map, const void *key, size_t key_size, size_t val_size, size_t hash, int (*compar)(const void *, const void *)) {
+    extern ssize_t fhm_find_sse(Flat_hash_map *map, const void *key, size_t key_size, size_t val_size, uint64_t hash, int (*compar)(const void *, const void *)) {
         size_t group;
         __m128i bigvect;
         uint8_t h2;
@@ -144,17 +144,16 @@ extern int fhm_resize(Flat_hash_map *map, size_t n, size_t key_size, size_t val_
         return -1;
     }
 
-    extern void *fhm_lookup_sse(Flat_hash_map *map, const void *key, size_t key_size, size_t val_size, size_t hash, int (*compar)(const void *, const void *)) {
+    extern void *fhm_lookup_sse(Flat_hash_map *map, const void *key, size_t key_size, size_t val_size, uint64_t hash, int (*compar)(const void *, const void *)) {
         return fhm_get_val(map, fhm_find_sse(map, key, key_size, val_size, hash, compar), key_size, val_size);
     }
 
-    static inline ssize_t __add_sse__(void *ptr, size_t n, const void *key, size_t key_size, const void *val, size_t val_size, size_t hash) {
-        __m128i bigvect = _mm_set1_epi8(0xFF);
+    static inline ssize_t __add_sse__(void *ptr, size_t n, const void *key, size_t key_size, const void *val, size_t val_size, uint64_t hash) {
         size_t group;
         int mask, t;
 
         for (group = (hash>>7) % n; group != n; ++group) {
-            mask = _mm_movemask_epi8(_mm_cmpeq_epi8(bigvect, *(__m128i*)((uint8_t*)ptr+group*16)));
+            mask = _mm_movemask_epi8(*(__m128i*)((uint8_t*)ptr+group*16));
             if (!mask) continue;
             t = __builtin_ctz(*(unsigned int*)&mask);
             memset((uint8_t*)ptr+group*16+t, hash&0x7F, 1);
@@ -165,13 +164,12 @@ extern int fhm_resize(Flat_hash_map *map, size_t n, size_t key_size, size_t val_
         return -1;
     }
 
-    extern ssize_t fhm_add_sse(Flat_hash_map *map, const void *key, size_t key_size, const void *val, size_t val_size, size_t hash) {
-        // __m128i bigvect = _mm_set1_epi8(0xFF);
+    extern ssize_t fhm_add_sse(Flat_hash_map *map, const void *key, size_t key_size, const void *val, size_t val_size, uint64_t hash) {
         // size_t group;
         // int mask, t;
 
         // for (group = (hash>>7) % map->n; group != map->n; ++group) {
-        //     mask = _mm_movemask_epi8(_mm_cmpeq_epi8(bigvect, *(__m128i*)((uint8_t*)map->data+group*16)));
+        //     mask = _mm_movemask_epi8(*(__m128i*)((uint8_t*)map->data+group*16));
         //     if (!mask) continue;
         //     t = __builtin_ctz(*(unsigned int*)&mask);
         //     memset((uint8_t*)map->data+group*16+t, hash&0x7F, 1);
@@ -194,7 +192,7 @@ extern int fhm_resize(Flat_hash_map *map, size_t n, size_t key_size, size_t val_
         memset((uint8_t*)map->data+index, 0x80, 1);
     }
 
-    extern int fhm_resize_sse(Flat_hash_map *map, size_t n, size_t key_size, size_t val_size, size_t (*hash)(const void*)) {
+    extern int fhm_resize_sse(Flat_hash_map *map, size_t n, size_t key_size, size_t val_size, uint64_t (*hash)(const void*)) {
         size_t i, hash_;
         ssize_t ret;
         int mask, t;

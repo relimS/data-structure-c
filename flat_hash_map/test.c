@@ -1,5 +1,6 @@
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -22,8 +23,8 @@
 #define FNV_prime 1099511628211U
 
 
-size_t fnv1a(const void *data) {
-    size_t i, Hash;
+uint64_t fnv1a(const void *data) {
+    uint64_t i, Hash;
     Hash = FNV_offmap_basis;
     for (i = 0; i != sizeof(size_t); ++i) {
         Hash ^= *((char*)data+i);

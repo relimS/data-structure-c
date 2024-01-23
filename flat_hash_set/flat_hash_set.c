@@ -15,7 +15,7 @@ extern int fhs_init(Flat_hash_set *set, size_t n, size_t size) {
     return 0;
 }
 
-static inline ssize_t __add__(void *ptr, size_t n, const void *data, size_t size, size_t hash) {
+static inline ssize_t __add__(void *ptr, size_t n, const void *data, size_t size, uint64_t hash) {
     size_t group;
     uint8_t i;
 
@@ -32,27 +32,28 @@ static inline ssize_t __add__(void *ptr, size_t n, const void *data, size_t size
 
 }
 
-extern ssize_t fhs_add(Flat_hash_set *set, const void *data, size_t size, size_t hash) {
-    size_t group;
-    uint8_t i;
+extern ssize_t fhs_add(Flat_hash_set *set, const void *data, size_t size, uint64_t hash) {
+    // size_t group;
+    // uint8_t i;
 
-    for (group = (hash>>7) % set->n; group != set->n; ++group) {
-        for (i = 0; i != 16; ++i) {
-            if (((uint8_t*)set->data)[group*16+i] == 0xFF) {
-                memset((uint8_t*)set->data+group*16+i, hash&0x7F, 1);
-                memcpy(fhs_get(set, group*16+i, size), data, size);
-                return group*16+i;                
-            }
-        }
-    }
-    return -1;
+    // for (group = (hash>>7) % set->n; group != set->n; ++group) {
+    //     for (i = 0; i != 16; ++i) {
+    //         if (((uint8_t*)set->data)[group*16+i] == 0xFF) {
+    //             memset((uint8_t*)set->data+group*16+i, hash&0x7F, 1);
+    //             memcpy(fhs_get(set, group*16+i, size), data, size);
+    //             return group*16+i;                
+    //         }
+    //     }
+    // }
+    // return -1;
+    return __add__(set->data, set->n, data, size, hash);
 }
 
 extern void *fhs_get(Flat_hash_set *set, size_t index, size_t size) {
     return (void*)((uint8_t*)set->data+set->n*16+index*size);
 }
 
-extern ssize_t fhs_find(Flat_hash_set *set, const void *data, size_t size, size_t hash, int (*compar)(const void *, const void *)) {
+extern ssize_t fhs_find(Flat_hash_set *set, const void *data, size_t size, uint64_t hash, int (*compar)(const void *, const void *)) {
     size_t group;
     uint8_t i, h2;
 
@@ -80,7 +81,7 @@ void fhs_free(Flat_hash_set *set) {
 }
 
 
-extern int fhs_resize(Flat_hash_set *set, size_t n, size_t size, size_t (*hash)(const void*)) {
+extern int fhs_resize(Flat_hash_set *set, size_t n, size_t size, uint64_t (*hash)(const void*)) {
     size_t i, hash_;
     ssize_t ret;
     uint8_t j;
@@ -113,7 +114,7 @@ extern int fhs_resize(Flat_hash_set *set, size_t n, size_t size, size_t (*hash)(
 
 
 #ifdef __SSE2__
-    extern ssize_t fhs_find_sse(Flat_hash_set *set, const void *data, size_t size, size_t hash, int (*compar)(const void *, const void *)) {
+    extern ssize_t fhs_find_sse(Flat_hash_set *set, const void *data, size_t size, uint64_t hash, int (*compar)(const void *, const void *)) {
         size_t group;
         __m128i bigvect;
         uint8_t h2;
@@ -135,13 +136,12 @@ extern int fhs_resize(Flat_hash_set *set, size_t n, size_t size, size_t (*hash)(
         return -1;
     }
 
-    static inline ssize_t __add_sse__(void *ptr, size_t n, const void *data, size_t size, size_t hash) {
-        __m128i bigvect = _mm_set1_epi8(0xFF);
+    static inline ssize_t __add_sse__(void *ptr, size_t n, const void *data, size_t size, uint64_t hash) {
         size_t group;
         int mask, t;
 
         for (group = (hash>>7) % n; group != n; ++group) {
-            mask = _mm_movemask_epi8(_mm_cmpeq_epi8(bigvect, *(__m128i*)((uint8_t*)ptr+group*16)));
+            mask = _mm_movemask_epi8(*(__m128i*)((uint8_t*)ptr+group*16));
             if (!mask) continue;
             t = __builtin_ctz(*(unsigned int*)&mask);
             memset((uint8_t*)ptr+group*16+t, hash&0x7F, 1);
@@ -151,21 +151,20 @@ extern int fhs_resize(Flat_hash_set *set, size_t n, size_t size, size_t (*hash)(
         return -1;
     }
 
-    extern ssize_t fhs_add_sse(Flat_hash_set *set, const void *data, size_t size, size_t hash) {
-        __m128i bigvect = _mm_set1_epi8(0xFF);
-        size_t group;
-        int mask, t;
+    extern ssize_t fhs_add_sse(Flat_hash_set *set, const void *data, size_t size, uint64_t hash) {
+        // size_t group;
+        // int mask, t;
 
-        for (group = (hash>>7) % set->n; group != set->n; ++group) {
-            mask = _mm_movemask_epi8(_mm_cmpeq_epi8(bigvect, *(__m128i*)((uint8_t*)set->data+group*16)));
-            if (!mask) continue;
-            t = __builtin_ctz(*(unsigned int*)&mask);
-            memset((uint8_t*)set->data+group*16+t, hash&0x7F, 1);
-            memcpy(fhs_get(set, group*16+t, size), data, size);
-            return group*16+t;
-        }
-        return -1;
-        // return __add_sse__(set->data, set->n, data, size, hash);
+        // for (group = (hash>>7) % set->n; group != set->n; ++group) {
+        //     mask = _mm_movemask_epi8(*(__m128i*)((uint8_t*)set->data+group*16));
+        //     if (!mask) continue;
+        //     t = __builtin_ctz(*(unsigned int*)&mask);
+        //     memset((uint8_t*)set->data+group*16+t, hash&0x7F, 1);
+        //     memcpy(fhs_get(set, group*16+t, size), data, size);
+        //     return group*16+t;
+        // }
+        // return -1;
+        return __add_sse__(set->data, set->n, data, size, hash);
     }
 
     extern void fhs_delete_sse(Flat_hash_set *set, size_t index) {
@@ -178,7 +177,7 @@ extern int fhs_resize(Flat_hash_set *set, size_t n, size_t size, size_t (*hash)(
         }
         memset((uint8_t*)set->data+index, 0x80, 1);
     }
-    extern int fhs_resize_sse(Flat_hash_set *set, size_t n, size_t size, size_t (*hash)(const void*)) {
+    extern int fhs_resize_sse(Flat_hash_set *set, size_t n, size_t size, uint64_t (*hash)(const void*)) {
         size_t i, hash_;
         ssize_t ret;
         int mask, t;
