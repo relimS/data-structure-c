@@ -21,7 +21,7 @@ static inline ssize_t __add__(void *ptr, size_t n, const void *key, size_t key_s
 
     for (group = (hash>>7) % n; group != n; ++group) {
         for (i = 0; i != 16; ++i) {
-            if (((uint8_t*)ptr)[group*16+i] == 0xFF) {
+            if (((uint8_t*)ptr)[group*16+i] & 0x80) {
                 memset((uint8_t*)ptr+group*16+i, hash&0x7F, 1);
                 memcpy((void*)((uint8_t*)ptr+n*16+(group*16+i)*(key_size+val_size)), key, key_size);
                 memcpy((void*)((uint8_t*)ptr+n*16+(group*16+i)*(key_size+val_size)+key_size), val, val_size);
@@ -39,7 +39,7 @@ extern ssize_t fhm_add(Flat_hash_map *map, const void *key, size_t key_size, con
 
     // for (group = (hash>>7) % map->n; group != map->n; ++group) {
     //     for (i = 0; i != 16; ++i) {
-    //         if (((uint8_t*)map->data)[group*16+i] == 0xFF) {
+    //         if (((uint8_t*)map->data)[group*16+i] & 0x80) {
     //             memset((uint8_t*)map->data+group*16+i, hash&0x7F, 1);
     //             memcpy(fhm_get_key(map, i, key_size, val_size), key, key_size);
     //             memcpy(fhm_get_val(map, group*16+i, key_size, val_size), val, val_size);

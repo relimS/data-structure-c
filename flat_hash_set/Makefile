@@ -6,23 +6,31 @@ DEBUGGER := $(shell command -v gdb)
 
 all: release
 
-debug: override CFLAGS += ${DEBUG_FLAGS}
+release: clean release_compile exec
+
 debug: clean compile exec
 
-release: override CFLAGS += ${RELEASE_FLAGS}
-release: clean compile exec
+debug_compile: override CFLAGS += ${DEBUG_FLAGS}
+debug_compile: compile
 
+release_compile: override CFLAGS += ${RELEASE_FLAGS}
+release_compile: compile
+
+asm: compiler_check
+	$(CC) -S -fverbose-asm $(CFLAGS) flat_hash_set.c
+
+compile: compiler_check
 compile:
-ifeq ($(CC),)
-	@echo "Error: Cannot find gcc or clang."
-	@echo "Suggestion: make CC=<compiler path>"
-else
 	$(CC) $(CFLAGS) -c flat_hash_set.c -o flat_hash_set.o
 	$(CC) $(CFLAGS) test.c flat_hash_set.o -o fhs_test
+
+compiler_check:
+ifeq ($(CC),)
+	$(error Please specify a compiler)
 endif
 
 exec:
 	./fhs_test
 
 clean:
-	$(RM) flat_hash_set.o fhs_test*
+	$(RM) flat_hash_set.o flat_hash_set.s test.s fhs_test*

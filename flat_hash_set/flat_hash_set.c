@@ -21,7 +21,7 @@ static inline ssize_t __add__(void *ptr, size_t n, const void *data, size_t size
 
     for (group = (hash>>7) % n; group != n; ++group) {
         for (i = 0; i != 16; ++i) {
-            if (((uint8_t*)ptr)[group*16+i] == 0xFF) {
+            if (((uint8_t*)ptr)[group*16+i] & (uint8_t)0x80) {
                 memset((uint8_t*)ptr+group*16+i, hash&0x7F, 1);
                 memcpy((void*)((uint8_t*)ptr+n*16+(group*16+i)*size), data, size);
                 return group*16+i;                
@@ -38,7 +38,7 @@ extern ssize_t fhs_add(Flat_hash_set *set, const void *data, size_t size, uint64
 
     // for (group = (hash>>7) % set->n; group != set->n; ++group) {
     //     for (i = 0; i != 16; ++i) {
-    //         if (((uint8_t*)set->data)[group*16+i] == 0xFF) {
+    //         if (((uint8_t*)set->data)[group*16+i] & 0x80) {
     //             memset((uint8_t*)set->data+group*16+i, hash&0x7F, 1);
     //             memcpy(fhs_get(set, group*16+i, size), data, size);
     //             return group*16+i;                
