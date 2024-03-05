@@ -10,7 +10,7 @@
 #define STRINGIZE_(x) #x
 #define STRINGIZE(x) STRINGIZE_(x)
 
-#define N 33554432
+#define N 58161015
 #define TABLE_N 67108864
 
 // #define N 1024

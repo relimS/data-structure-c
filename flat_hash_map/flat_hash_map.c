@@ -16,16 +16,25 @@ extern int fhm_init(Flat_hash_map *map, size_t n, size_t key_size, size_t val_si
 }
 
 static inline ssize_t __add__(void *ptr, size_t n, const void *key, size_t key_size, const void *val, size_t val_size, uint64_t hash) {
-    size_t group;
+    size_t group1, group;
     uint8_t i;
 
-    for (group = (hash>>7) % n; group != n; ++group) {
+    group1 = (hash>>7) % n;
+    for (i = 0; i != 16; ++i) {
+        if (((uint8_t*)ptr)[group1*16+i] & 0x80) {
+            memset((uint8_t*)ptr+group1*16+i, hash&0x7F, 1);
+            memcpy((void*)((uint8_t*)ptr+n*16+(group1*16+i)*(key_size+val_size)), key, key_size);
+            memcpy((void*)((uint8_t*)ptr+n*16+(group1*16+i)*(key_size+val_size)+key_size), val, val_size);
+            return group1*16+i;
+        }
+    }
+    for (group = (group1+1) % n; group != n; group = (group+1) % n) {
         for (i = 0; i != 16; ++i) {
             if (((uint8_t*)ptr)[group*16+i] & 0x80) {
                 memset((uint8_t*)ptr+group*16+i, hash&0x7F, 1);
                 memcpy((void*)((uint8_t*)ptr+n*16+(group*16+i)*(key_size+val_size)), key, key_size);
                 memcpy((void*)((uint8_t*)ptr+n*16+(group*16+i)*(key_size+val_size)+key_size), val, val_size);
-                return group*16+i;                
+                return group*16+i;
             }
         }
     }
@@ -34,20 +43,6 @@ static inline ssize_t __add__(void *ptr, size_t n, const void *key, size_t key_s
 }
 
 extern ssize_t fhm_add(Flat_hash_map *map, const void *key, size_t key_size, const void *val, size_t val_size, uint64_t hash) {
-    // size_t group;
-    // uint8_t i;
-
-    // for (group = (hash>>7) % map->n; group != map->n; ++group) {
-    //     for (i = 0; i != 16; ++i) {
-    //         if (((uint8_t*)map->data)[group*16+i] & 0x80) {
-    //             memset((uint8_t*)map->data+group*16+i, hash&0x7F, 1);
-    //             memcpy(fhm_get_key(map, i, key_size, val_size), key, key_size);
-    //             memcpy(fhm_get_val(map, group*16+i, key_size, val_size), val, val_size);
-    //             return group*16+i;                
-    //         }
-    //     }
-    // }
-    // return map->n*16;
     return __add__(map->data, map->n, key, key_size, val, val_size, hash);
 }
 
@@ -60,11 +55,21 @@ extern void *fhm_get_val(Flat_hash_map *map, size_t index, size_t key_size, size
 }
 
 extern ssize_t fhm_find(Flat_hash_map *map, const void *key, size_t key_size, size_t val_size, uint64_t hash, int (*compar)(const void *, const void *)) {
-    size_t group;
+    size_t group1, group;
     uint8_t i, h2;
 
     h2 = hash&0x7F;
-    for (group = (hash>>7) % map->n; group != map->n; ++group) {
+    group1 = (hash>>7) % map->n;
+    for (i = 0; i != 16; ++i) {
+        if (((uint8_t*)map->data)[group1*16+i] == h2) {
+            if (!compar(fhm_get_key(map, group1*16+i, key_size, val_size), key)) {
+                return group1*16+i;
+            }
+            continue;
+        }
+        if (((uint8_t*)map->data)[group1*16+i] == 0xFF) return -1;
+    }
+    for (group = (group1+1) % map->n; group != map->n; group = (group+1) % map->n) {
         for (i = 0; i != 16; ++i) {
             if (((uint8_t*)map->data)[group*16+i] == h2) {
                 if (!compar(fhm_get_key(map, group*16+i, key_size, val_size), key)) {
@@ -123,13 +128,26 @@ extern int fhm_resize(Flat_hash_map *map, size_t n, size_t key_size, size_t val_
 
 #ifdef __SSE2__
     extern ssize_t fhm_find_sse(Flat_hash_map *map, const void *key, size_t key_size, size_t val_size, uint64_t hash, int (*compar)(const void *, const void *)) {
-        size_t group;
+        size_t group1, group;
         __m128i bigvect;
         uint8_t h2;
         int mask, t;
 
         h2 = hash&0x7F;
-        for (group = (hash>>7) % map->n; group != map->n; ++group) {
+
+        group1 = (hash>>7) % map->n;
+        bigvect =_mm_set1_epi8(h2);
+        mask = _mm_movemask_epi8(_mm_cmpeq_epi8(bigvect, *(__m128i*)((uint8_t*)map->data+group1*16)));
+        while (mask) {
+            t = __builtin_ctz(*(unsigned int*)&mask);
+            mask ^= 0x01<<t;
+            if (!compar(fhm_get_key(map, group1*16+t, key_size, val_size), key)) return group1*16+t;
+        }
+        bigvect = _mm_set1_epi8(0xFF);
+        mask = _mm_movemask_epi8(_mm_cmpeq_epi8(bigvect, *(__m128i*)((uint8_t*)map->data+group1*16)));
+        if (mask) return -1;
+
+        for (group = (group1+1) % map->n; group != map->n; group = (group+1) % map->n) {
             bigvect =_mm_set1_epi8(h2);
             mask = _mm_movemask_epi8(_mm_cmpeq_epi8(bigvect, *(__m128i*)((uint8_t*)map->data+group*16)));
             while (mask) {
@@ -149,10 +167,20 @@ extern int fhm_resize(Flat_hash_map *map, size_t n, size_t key_size, size_t val_
     }
 
     static inline ssize_t __add_sse__(void *ptr, size_t n, const void *key, size_t key_size, const void *val, size_t val_size, uint64_t hash) {
-        size_t group;
+        size_t group1, group;
         int mask, t;
 
-        for (group = (hash>>7) % n; group != n; ++group) {
+        group1 = (hash>>7) % n;
+        mask = _mm_movemask_epi8(*(__m128i*)((uint8_t*)ptr+group1*16));
+        if (mask) {
+            t = __builtin_ctz(*(unsigned int*)&mask);
+            memset((uint8_t*)ptr+group1*16+t, hash&0x7F, 1);
+            memcpy((uint8_t*)ptr+n*16+(group1*16+t)*(key_size+val_size), key, key_size);
+            memcpy((uint8_t*)ptr+n*16+(group1*16+t)*(key_size+val_size)+key_size, val, val_size);
+            return group1*16+t;
+        }
+
+        for (group = (group1+1) % n; group != n; group = (group+1) % n) {
             mask = _mm_movemask_epi8(*(__m128i*)((uint8_t*)ptr+group*16));
             if (!mask) continue;
             t = __builtin_ctz(*(unsigned int*)&mask);
@@ -165,19 +193,6 @@ extern int fhm_resize(Flat_hash_map *map, size_t n, size_t key_size, size_t val_
     }
 
     extern ssize_t fhm_add_sse(Flat_hash_map *map, const void *key, size_t key_size, const void *val, size_t val_size, uint64_t hash) {
-        // size_t group;
-        // int mask, t;
-
-        // for (group = (hash>>7) % map->n; group != map->n; ++group) {
-        //     mask = _mm_movemask_epi8(*(__m128i*)((uint8_t*)map->data+group*16));
-        //     if (!mask) continue;
-        //     t = __builtin_ctz(*(unsigned int*)&mask);
-        //     memset((uint8_t*)map->data+group*16+t, hash&0x7F, 1);
-        //     memcpy(fhm_get_key(map, group*16+t, key_size, val_size), key, key_size);
-        //     memcpy(fhm_get_val(map, group*16+t, key_size, val_size), val, val_size);
-        //     return group*16+t;
-        // }
-        // return -1;
         return __add_sse__(map->data, map->n, key, key_size, val, val_size, hash);
     }
 
